@@ -1,10 +1,13 @@
 const PREC = {
-  DOT: 17,
-  INVOCATION: 16,
-  POSTFIX: 16,
-  PREFIX: 15,
-  UNARY: 15,
-  CAST: 14,
+  DOT: 18,
+  INVOCATION: 18,
+  POSTFIX: 18,
+  PREFIX: 17,
+  UNARY: 17,
+  CAST: 17,
+  RANGE: 16,
+  SWITCH: 15,
+  WITH: 14,
   MULT: 13,
   ADD: 12,
   SHIFT: 11,
@@ -15,9 +18,9 @@ const PREC = {
   OR: 6,
   LOGAND: 5,
   LOGOR: 4,
-  COND: 3,
-  ASSIGN: 2,
-  SEQ: 1,
+  COALESCING: 3,
+  COND: 2,
+  ASSIGN: 1,
   SELECT: 0,
   TYPE_PATTERN: -2,
 };
@@ -49,8 +52,9 @@ module.exports = grammar({
 
     [$.event_declaration, $.variable_declarator],
 
-    [$.nullable_type, $.binary_expression],
-    [$.nullable_type, $.binary_expression, $.type_pattern],
+    [$.nullable_type, $.as_expression],
+    [$.nullable_type, $.is_expression, $.type_pattern],
+    [$.nullable_type, $.as_expression, $.type_pattern],
 
     [$._name, $._expression],
     [$._simple_name, $.type_parameter],
@@ -76,7 +80,9 @@ module.exports = grammar({
     [$.parameter, $.declaration_expression],
     [$.tuple_element],
     [$.tuple_element, $.declaration_expression],
-    [$.tuple_element, $.variable_declarator]
+    [$.tuple_element, $.variable_declarator],
+
+    [$.array_creation_expression, $.element_access_expression]
   ],
 
   inline: $ => [
@@ -380,7 +386,7 @@ module.exports = grammar({
     type_parameter_list: $ => seq('<', commaSep1($.type_parameter), '>'),
 
     type_parameter: $ => seq(
-      optional($.attribute_list),
+      repeat($.attribute_list),
       optional(choice('in', 'out')),
       $.identifier
     ),
@@ -1051,11 +1057,11 @@ module.exports = grammar({
       $._expression
     ),
 
-    array_creation_expression: $ => seq(
+    array_creation_expression: $ => prec.dynamic(PREC.UNARY, seq(
       'new',
       $.array_type,
       optional($.initializer_expression)
-    ),
+    )),
 
     initializer_expression: $ => seq(
       '{',
@@ -1114,10 +1120,10 @@ module.exports = grammar({
       ))
     )),
 
-    element_access_expression: $ => seq(
+    element_access_expression: $ => prec.right(PREC.UNARY, seq(
       field('expression', $._expression),
       field('subscript', $.bracketed_argument_list)
-    ),
+    )),
 
     element_binding_expression: $ => $.bracketed_argument_list,
 
@@ -1311,7 +1317,7 @@ module.exports = grammar({
 
     query_continuation: $ => seq('into', $.identifier, $._query_body),
 
-    range_expression: $ => prec.right(seq(
+    range_expression: $ => prec.right(PREC.RANGE, seq(
       optional($._expression),
       '..',
       optional($._expression)
@@ -1348,14 +1354,14 @@ module.exports = grammar({
       optional($.initializer_expression)
     ),
 
-    switch_expression: $ => seq(
+    switch_expression: $ => prec(PREC.SWITCH, seq(
       $._expression,
       'switch',
       '{',
       commaSep($.switch_expression_arm),
       optional(','),
       '}',
-    ),
+    )),
 
     switch_expression_arm: $ => seq(
       $._pattern,
@@ -1378,7 +1384,8 @@ module.exports = grammar({
 
     type_of_expression: $ => seq('typeof', '(', $._type, ')'),
 
-    with_expression: $ => seq($._expression, 'with', '{', optional($.with_initializer_expression), '}'),
+    with_expression: $ => prec.left(PREC.WITH,
+      seq($._expression, 'with', '{', optional($.with_initializer_expression), '}')),
 
     with_initializer_expression: $ => commaSep1($.simple_assignment_expression),
 
@@ -1388,6 +1395,7 @@ module.exports = grammar({
       $.anonymous_method_expression,
       $.anonymous_object_creation_expression,
       $.array_creation_expression,
+      $.as_expression,
       $.assignment_expression,
       $.await_expression,
       $.base_expression,
@@ -1405,6 +1413,7 @@ module.exports = grammar({
       $.initializer_expression,
       $.interpolated_string_expression,
       $.invocation_expression,
+      $.is_expression,
       $.is_pattern_expression,
       $.lambda_expression,
       $.make_ref_expression,
@@ -1434,39 +1443,49 @@ module.exports = grammar({
 
     binary_expression: $ => choice(
       ...[
-        ['&&', PREC.LOGAND],
-        ['||', PREC.LOGOR],
-        ['>>', PREC.SHIFT],
-        ['<<', PREC.SHIFT],
-        ['&', PREC.AND],
-        ['^', PREC.OR],
-        ['|', PREC.OR],
-        ['+', PREC.ADD],
-        ['-', PREC.ADD],
-        ['*', PREC.MULT],
-        ['/', PREC.MULT],
-        ['%', PREC.MULT],
-        ['<', PREC.REL],
-        ['<=', PREC.REL],
-        ['==', PREC.EQUAL],
-        ['!=', PREC.EQUAL],
-        ['>=', PREC.REL],
-        ['>', PREC.REL],
-        ['??', PREC.EQUAL],
+        ['&&', PREC.LOGAND], // logical_and_expression
+        ['||', PREC.LOGOR], // logical_or_expression
+        ['>>', PREC.SHIFT], // right_shift_expression
+        ['<<', PREC.SHIFT], // left_shift_expression
+        ['&', PREC.AND],  // bitwise_and_expression
+        ['^', PREC.XOR], // exclusive_or_expression
+        ['|', PREC.OR], // bitwise_or_expression
+        ['+', PREC.ADD], // add_expression
+        ['-', PREC.ADD], // subtract_expression
+        ['*', PREC.MULT], // multiply_expression
+        ['/', PREC.MULT], // divide_expression
+        ['%', PREC.MULT], // modulo_expression
+        ['<', PREC.REL], // less_than_expression
+        ['<=', PREC.REL], // less_than_or_equal_expression
+        ['==', PREC.EQUAL], // equals_expression
+        ['!=', PREC.EQUAL], // not_equals_expression
+        ['>=', PREC.REL], // greater_than_or_equal_expression
+        ['>', PREC.REL] //  greater_than_expression
       ].map(([operator, precedence]) =>
         prec.left(precedence, seq(
           field('left', $._expression),
           field('operator', operator),
           field('right', $._expression)
         ))
-      ).concat(
-        prec.left(PREC.EQUAL, seq(
-          field('left', $._expression),
-          field('operator', choice('is', 'as')),
-          field('right', $._type)
-        ))
-      )
+      ),
+      prec.right(PREC.COALESCING, seq(
+        field('left', $._expression),
+        field('operator', '??'), // coalesce_expression
+        field('right', $._expression)
+      ))
     ),
+
+    as_expression: $ => prec.left(PREC.EQUAL, seq(
+      field('left', $._expression),
+      field('operator', 'as'),
+      field('right', $._type)
+    )),
+
+    is_expression: $ => prec.left(PREC.EQUAL, seq(
+      field('left', $._expression),
+      field('operator', 'is'),
+      field('right', $._type)
+    )),
 
     _identifier_token: $ => token(seq(optional('@'), /[a-zA-Zα-ωΑ-Ωµ_][a-zA-Zα-ωΑ-Ωµ_0-9]*/)), // identifier_token in Roslyn
     identifier: $ => choice($._identifier_token, $._contextual_keywords),
@@ -1567,7 +1586,7 @@ module.exports = grammar({
     // Comments
 
     comment: $ => token(choice(
-      seq('//', /.*/),
+      seq('//', /[^\n\r]*/),
       seq(
         '/*',
         repeat(choice(

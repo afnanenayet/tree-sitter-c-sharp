@@ -57,42 +57,44 @@ class Foo {
               right: (integer_literal))))))))
 
 =====================================
-Ternary expressions vs nullable types
+Ternary expressions is type
 =====================================
 
-class Foo {
-  void Test() {
-    x is int?;
-    x is int
-      ? a
-      : b;
-    x is int?
-      ? a
-      : b;
-  }
-}
+var t = x is int
+  ? a
+  : b;
 
 ---
 
 (compilation_unit
-  (class_declaration
-    (identifier)
-    (declaration_list
-      (method_declaration
-        (void_keyword)
-        (identifier)
-        (parameter_list)
-        (block
-          (expression_statement
-            (binary_expression (identifier) (nullable_type (predefined_type))))
-          (expression_statement
+  (global_statement
+    (local_declaration_statement
+      (variable_declaration (implicit_type)
+        (variable_declarator (identifier)
+          (equals_value_clause
             (conditional_expression
-              (binary_expression (identifier) (predefined_type))
+              (is_expression (identifier) (predefined_type))
               (identifier)
-              (identifier)))
-          (expression_statement
+              (identifier))))))))
+
+=====================================
+Ternary expressions is nullable type
+=====================================
+
+var u = x is int?
+  ? a
+  : b;
+
+---
+
+(compilation_unit
+  (global_statement
+    (local_declaration_statement
+      (variable_declaration (implicit_type)
+        (variable_declarator (identifier)
+          (equals_value_clause
             (conditional_expression
-              (binary_expression (identifier) (nullable_type (predefined_type)))
+              (is_expression (identifier) (nullable_type (predefined_type)))
               (identifier)
               (identifier))))))))
 
@@ -148,6 +150,59 @@ void Test() {
           (binary_expression
             (cast_expression (identifier) (identifier))
             (cast_expression (identifier) (identifier)))))))))
+
+=====================================
+Cast expression of array access
+=====================================
+
+b = (float)a[0];
+
+---
+
+(compilation_unit
+  (global_statement
+    (expression_statement
+      (assignment_expression (identifier) (assignment_operator)
+        (cast_expression (predefined_type)
+          (element_access_expression (identifier)
+            (bracketed_argument_list (argument (integer_literal)))))))))
+
+=====================================
+Precedence of unary prefix operator and element access
+=====================================
+
+b = +a[0];
+
+---
+
+(compilation_unit
+  (global_statement
+    (expression_statement
+      (assignment_expression (identifier) (assignment_operator)
+        (prefix_unary_expression
+          (element_access_expression (identifier)
+            (bracketed_argument_list (argument (integer_literal)))))))))
+
+=====================================
+Precedence of switch_expression and binary_expression 
+=====================================
+
+b = 2 * a switch
+{
+    1 => 1,
+    _ => 0,
+};
+
+---
+
+(compilation_unit
+  (global_statement
+    (expression_statement
+      (assignment_expression (identifier) (assignment_operator)
+        (binary_expression (integer_literal)
+          (switch_expression (identifier)
+            (switch_expression_arm (constant_pattern (integer_literal)) (integer_literal))
+            (switch_expression_arm (discard) (integer_literal))))))))
 
 ============================
 Anonymous object creation with empty body
@@ -495,7 +550,7 @@ void a() {
               (invocation_expression
                 (member_access_expression (identifier) (identifier))
                 (argument_list (argument (identifier))))))))))))
-         
+
 ============================
 Async Lambda
 ============================
@@ -833,6 +888,38 @@ void b() {
                       (integer_literal))))))))))))
 
 ============================
+Array of named tuple
+============================
+
+void a() {
+  var z = new (string b, string c)[3];
+}
+
+---
+
+(compilation_unit
+  (global_statement
+    (local_function_statement (void_keyword) (identifier) (parameter_list)
+      (block
+        (local_declaration_statement
+          (variable_declaration
+            (implicit_type)
+            (variable_declarator
+              (identifier)
+              (equals_value_clause
+                (array_creation_expression
+                  (array_type
+                    (tuple_type
+                      (tuple_element
+                        (predefined_type)
+                        (identifier))
+                      (tuple_element
+                        (predefined_type)
+                        (identifier)))
+                  (array_rank_specifier
+                    (integer_literal))))))))))))
+
+============================
 Makeref
 ============================
 
@@ -1153,6 +1240,24 @@ class Foo {
               (binary_expression
                 (identifier)
                 (throw_expression (identifier))))))))))
+
+
+=====================================
+Pecedence with OR and XOR
+=====================================
+
+b = 4 | 5 ^ 6;
+
+---
+(compilation_unit
+  (global_statement
+    (expression_statement
+      (assignment_expression (identifier) (assignment_operator)
+        (binary_expression
+          (integer_literal)
+            (binary_expression
+              (integer_literal)
+              (integer_literal)))))))
 
 =====================================
 range expressions full
@@ -1477,7 +1582,7 @@ var b = s is string;
         (variable_declarator
           (identifier)
           (equals_value_clause
-            (binary_expression
+            (is_expression
               (identifier)
               (predefined_type))))))))
 
@@ -1664,11 +1769,11 @@ var x = operand is ILiteralOperation { ConstantValue: { HasValue: true, Value: n
               (recursive_pattern
                 (identifier)
                 (property_pattern_clause
-                  (subpattern 
+                  (subpattern
                     (name_colon (identifier))
-                    (recursive_pattern 
+                    (recursive_pattern
                       (property_pattern_clause
-                        (subpattern 
+                        (subpattern
                           (name_colon (identifier))
                           (constant_pattern (boolean_literal)))
                         (subpattern
@@ -1723,7 +1828,7 @@ Type patterns
 =====================================
 
 var b = o is int or string; //is_pattern_expression with type_pattern
-var c = o is int; //binary_expression ("IsExpression" in Roslyn)
+var c = o is int; //is_expression with type
 
 ---
 
@@ -1747,10 +1852,10 @@ var c = o is int; //binary_expression ("IsExpression" in Roslyn)
           (variable_declarator
             (identifier)
             (equals_value_clause
-              (binary_expression
+              (is_expression
                 (identifier)
                 (predefined_type))))))) (comment))
-                
+
 
 =====================================
 Conditional expression with member accesses
@@ -1835,7 +1940,7 @@ if (a?.B != 1) { }
 =====================================
 Conditional access expression with simple member access
 =====================================
-      
+
 if ((p as Person[])?[0]._Age != 1) { }
 
 ---
@@ -1847,9 +1952,157 @@ if ((p as Person[])?[0]._Age != 1) { }
           (member_access_expression
             (conditional_access_expression
               (parenthesized_expression
-                (binary_expression (identifier) (array_type (identifier) (array_rank_specifier))))
+                (as_expression (identifier) (array_type (identifier) (array_rank_specifier))))
               (element_binding_expression
                 (bracketed_argument_list (argument (integer_literal)))))
             (identifier))
           (integer_literal))
       (block))))
+
+=====================================
+Null-coalescing operator is right-associative
+=====================================
+
+var a = b ?? c ?? d;
+
+---
+
+(compilation_unit
+  (global_statement
+    (local_declaration_statement
+      (variable_declaration
+        (implicit_type)
+        (variable_declarator
+          (identifier)
+          (equals_value_clause
+            (binary_expression
+              (identifier)
+              (binary_expression
+                (identifier)
+                (identifier)))))))))
+
+=====================================
+Precedence between null-coalescing operator and conditional OR
+=====================================
+
+var a = b ?? c || d ?? e;
+
+---
+
+(compilation_unit
+  (global_statement
+    (local_declaration_statement
+      (variable_declaration
+        (implicit_type)
+        (variable_declarator
+          (identifier)
+          (equals_value_clause
+            (binary_expression
+              (identifier)
+              (binary_expression
+                (binary_expression
+                  (identifier)
+                  (identifier))
+                (identifier)))))))))
+
+=====================================
+Precedence between null-coalescing operator and conditional operator
+=====================================
+
+var a = b ?? c ? d ?? e : f ?? g;
+
+---
+
+(compilation_unit
+  (global_statement
+    (local_declaration_statement
+      (variable_declaration
+        (implicit_type)
+        (variable_declarator
+          (identifier)
+          (equals_value_clause
+            (conditional_expression
+              (binary_expression
+                (identifier)
+                (identifier))
+              (binary_expression
+                (identifier)
+                (identifier))
+              (binary_expression
+                (identifier)
+                (identifier)))))))))
+
+=====================================
+Precedence between range and switch
+=====================================
+
+var a = 3..4 switch
+{
+    _ => true
+};
+
+---
+
+(compilation_unit
+  (global_statement
+    (local_declaration_statement
+      (variable_declaration
+        (implicit_type)
+        (variable_declarator
+          (identifier)
+          (equals_value_clause
+            (switch_expression
+              (range_expression
+                (integer_literal)
+                (integer_literal))
+              (switch_expression_arm
+                (discard)
+                (boolean_literal)))))))))
+
+=====================================
+Precedence between unary and switch
+=====================================
+
+var a = -3 switch
+{
+    _ => true
+};
+
+---
+
+(compilation_unit
+  (global_statement
+    (local_declaration_statement
+      (variable_declaration
+        (implicit_type)
+        (variable_declarator
+          (identifier)
+          (equals_value_clause
+            (switch_expression
+              (prefix_unary_expression
+                (integer_literal))
+              (switch_expression_arm
+                (discard)
+                (boolean_literal)))))))))
+
+=====================================
+Precedence between range and as operator
+=====================================
+
+var a = 3..4 as Range;
+
+---
+
+(compilation_unit
+  (global_statement
+    (local_declaration_statement
+      (variable_declaration
+        (implicit_type)
+        (variable_declarator
+          (identifier)
+          (equals_value_clause
+            (as_expression
+              (range_expression
+                (integer_literal)
+                (integer_literal))
+              (identifier))))))))
